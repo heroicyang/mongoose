@@ -661,12 +661,10 @@ describe('model: findByIdAndUpdate:', function(){
   it('supports v3 sort string syntax', function(done){
     var db = start()
       , M = db.model(modelname, collection)
-      , _id = new DocumentObjectId
 
-    db.close();
-
-    var now = new Date
-      , query;
+    var now = new Date;
+    var _id = new DocumentObjectId;
+    var query;
 
     query = M.findByIdAndUpdate(_id, { $set: { date: now }}, { sort: 'author -title' });
     assert.equal(2, Object.keys(query.options.sort).length);
@@ -677,7 +675,24 @@ describe('model: findByIdAndUpdate:', function(){
     assert.equal(2, Object.keys(query.options.sort).length);
     assert.equal(1, query.options.sort.author);
     assert.equal(-1, query.options.sort.title);
-    done();
+
+    // gh-1887
+    M.create(
+        { title: 1, meta: {visitors: 0}}
+      , { title: 2, meta: {visitors: 10}}
+      , { title: 3, meta: {visitors: 5}}
+      , function (err, a,b,c) {
+      if (err) return done(err);
+
+      M.findOneAndUpdate({}, { title: 'changed' })
+      .sort({ 'meta.visitors': -1 })
+      .exec(function(err, doc) {
+        if (err) return done(err);
+        db.close();
+        assert.equal(10, doc.meta.visitors);
+        done();
+      });
+    });
   })
 
   it('supports v3 sort object syntax', function(done){
@@ -699,6 +714,7 @@ describe('model: findByIdAndUpdate:', function(){
     assert.equal(2, Object.keys(query.options.sort).length);
     assert.equal(1, query.options.sort.author);
     assert.equal(-1, query.options.sort.title);
+
     done();
   });
 
@@ -797,6 +813,20 @@ describe('model: findByIdAndUpdate:', function(){
           assert.ok(doc);
           assert.equal(doc.name, null);
           done();
+      });
+    });
+  });
+
+  it('honors the overwrite option (gh-1809)', function(done) {
+    var db = start();
+    var M = db.model('1809', { name: String, change: Boolean });
+    M.create({ name: 'first' }, function(err, doc) {
+      if (err) return done(err);
+      M.findByIdAndUpdate(doc._id, { change: true }, { overwrite: true }, function(err, doc) {
+        if (err) return done(err);
+        assert.ok(doc.change);
+        assert.equal(undefined, doc.name);
+        done();
       });
     });
   });
